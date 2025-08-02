@@ -195,6 +195,7 @@ public class LoanReadPlatformServiceImpl implements LoanReadPlatformService, Loa
     private final LoanCapitalizedIncomeBalanceRepository loanCapitalizedIncomeBalanceRepository;
     private final LoanBuyDownFeeBalanceRepository loanBuyDownFeeBalanceRepository;
     private final InterestRefundServiceDelegate interestRefundServiceDelegate;
+    private final LoanMaximumAmountCalculator loanMaximumAmountCalculator;
 
     @Override
     public LoanAccountData retrieveOne(final Long loanId) {
@@ -492,7 +493,10 @@ public class LoanReadPlatformServiceImpl implements LoanReadPlatformService, Loa
                     capitalizedIncomeBalance = loanCapitalizedIncomeBalanceRepository.findAllByLoanId(loanId).stream()
                             .map(LoanCapitalizedIncomeBalance::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
                 }
-                transactionAmount = loan.getApprovedPrincipal().subtract(loan.getDisbursedAmount()).subtract(capitalizedIncomeBalance);
+                transactionAmount = loan.getLoanProduct().isAllowApprovedDisbursedAmountsOverApplied()
+                        ? loanMaximumAmountCalculator.getOverAppliedMax(loan)
+                        : loan.getApprovedPrincipal();
+                transactionAmount = transactionAmount.subtract(loan.getDisbursedAmount()).subtract(capitalizedIncomeBalance);
                 paymentOptions = this.paymentTypeReadPlatformService.retrieveAllPaymentTypes();
                 loanTransactionData = LoanTransactionData.loanTransactionDataForCreditTemplate(
                         LoanEnumerations.transactionType(transactionType), DateUtils.getBusinessLocalDate(), transactionAmount,
@@ -2463,6 +2467,19 @@ public class LoanReadPlatformServiceImpl implements LoanReadPlatformService, Loa
 
         return LoanTransactionData.loanTransactionDataForCreditTemplate(transactionType, targetTxn.getTransactionDate(),
                 interestRefundAmount, paymentTypeOptions, loan.getCurrency().toData());
+    }
+
+    @Override
+    public Long getResolvedLoanId(final ExternalId loanExternalId) {
+        loanExternalId.throwExceptionIfEmpty();
+
+        final Long resolvedLoanId = retrieveLoanIdByExternalId(loanExternalId);
+
+        if (resolvedLoanId == null) {
+            throw new LoanNotFoundException(loanExternalId);
+        }
+
+        return resolvedLoanId;
     }
 
     private LoanTransaction deriveDefaultInterestWaiverTransaction(final Loan loan) {
