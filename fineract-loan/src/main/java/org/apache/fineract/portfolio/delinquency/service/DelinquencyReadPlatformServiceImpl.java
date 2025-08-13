@@ -58,6 +58,7 @@ import org.apache.fineract.portfolio.loanaccount.data.InstallmentLevelDelinquenc
 import org.apache.fineract.portfolio.loanaccount.domain.Loan;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanRepaymentScheduleInstallment;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanRepository;
+import org.apache.fineract.portfolio.loanaccount.domain.LoanSummary;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanTransaction;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionRepository;
 import org.springframework.lang.NonNull;
@@ -80,6 +81,7 @@ public class DelinquencyReadPlatformServiceImpl implements DelinquencyReadPlatfo
     private final DelinquencyEffectivePauseHelper delinquencyEffectivePauseHelper;
     private final ConfigurationDomainService configurationDomainService;
     private final LoanTransactionRepository loanTransactionRepository;
+    private final PossibleNextRepaymentCalculationServiceDiscovery possibleNextRepaymentCalculationServiceDiscovery;
 
     @Override
     public List<DelinquencyRangeData> retrieveAllDelinquencyRanges() {
@@ -149,11 +151,14 @@ public class DelinquencyReadPlatformServiceImpl implements DelinquencyReadPlatfo
             // Overpaid
             // loans
             collectionData = loanDelinquencyDomainService.getOverdueCollectionData(loan, effectiveDelinquencyList);
-            // Ensure availableDisbursementAmount is never negative
-            final BigDecimal availableAmount = loan.getApprovedPrincipal().subtract(loan.getDisbursedAmount());
-            collectionData
-                    .setAvailableDisbursementAmount(availableAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : availableAmount);
+            collectionData.setAvailableDisbursementAmount(calculateAvailableDisbursementAmount(loan));
             collectionData.setNextPaymentDueDate(possibleNextRepaymentDate(nextPaymentDueDateConfig, loan));
+            PossibleNextRepaymentCalculationService possibleNextRepaymentCalculationService = possibleNextRepaymentCalculationServiceDiscovery
+                    .getService(loan);
+            if (possibleNextRepaymentCalculationService != null) {
+                collectionData.setNextPaymentAmount(
+                        possibleNextRepaymentCalculationService.possibleNextRepaymentAmount(loan, collectionData.getNextPaymentDueDate()));
+            }
 
             final LoanTransaction lastPayment = loan.getLastPaymentTransaction();
             if (lastPayment != null) {
@@ -175,6 +180,22 @@ public class DelinquencyReadPlatformServiceImpl implements DelinquencyReadPlatfo
         }
 
         return collectionData;
+    }
+
+    private BigDecimal calculateAvailableDisbursementAmount(@NonNull final Loan loan) {
+        BigDecimal availableDisbursementAmount = loan.getApprovedPrincipal().subtract(loan.getDisbursedAmount());
+        if (loan.getLoanRepaymentScheduleDetail().isEnableIncomeCapitalization()) {
+            final LoanSummary loanSummary = loan.getSummary();
+            if (loanSummary != null) {
+                final BigDecimal totalCapitalizedIncome = MathUtil.nullToZero(loanSummary.getTotalCapitalizedIncome());
+                final BigDecimal totalCapitalizedIncomeAdjustment = MathUtil.nullToZero(loanSummary.getTotalCapitalizedIncomeAdjustment());
+                final BigDecimal netCapitalizedIncome = totalCapitalizedIncome.subtract(totalCapitalizedIncomeAdjustment);
+                availableDisbursementAmount = availableDisbursementAmount.subtract(netCapitalizedIncome);
+            }
+        }
+
+        // Ensure availableDisbursementAmount is never negative
+        return availableDisbursementAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : availableDisbursementAmount;
     }
 
     private void addInstallmentLevelDelinquencyData(CollectionData collectionData, Long loanId) {

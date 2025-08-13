@@ -164,7 +164,7 @@ public class CapitalizedIncomeWritePlatformServiceImpl implements CapitalizedInc
                 .setAmountAdjustment(MathUtil.nullToZero(capitalizedIncomeBalance.getAmountAdjustment()).add(transactionAmount));
         capitalizedIncomeBalance.setUnrecognizedAmount(
                 MathUtil.negativeToZero(capitalizedIncomeBalance.getUnrecognizedAmount().subtract(transactionAmount)));
-        capitalizedIncomeBalanceRepository.save(capitalizedIncomeBalance);
+        capitalizedIncomeBalanceRepository.saveAndFlush(capitalizedIncomeBalance);
 
         loanLifecycleStateMachine.determineAndTransition(loan, transactionDate);
 
@@ -182,7 +182,7 @@ public class CapitalizedIncomeWritePlatformServiceImpl implements CapitalizedInc
     }
 
     private void recalculateLoanTransactions(Loan loan, LocalDate transactionDate, LoanTransaction transaction) {
-        if (loan.isInterestBearingAndInterestRecalculationEnabled() || DateUtils.isBeforeBusinessDate(transactionDate)) {
+        if (loan.isInterestRecalculationEnabled() || DateUtils.isBeforeBusinessDate(transactionDate)) {
             reprocessLoanTransactionsService.reprocessTransactions(loan);
         } else {
             reprocessLoanTransactionsService.processLatestTransaction(transaction, loan);

@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,9 +41,9 @@ import org.apache.fineract.infrastructure.core.data.CommandProcessingResult;
 import org.apache.fineract.infrastructure.core.data.CommandProcessingResultBuilder;
 import org.apache.fineract.infrastructure.core.data.DataValidatorBuilder;
 import org.apache.fineract.infrastructure.core.exception.ErrorHandler;
-import org.apache.fineract.infrastructure.core.exception.GeneralPlatformDomainRuleException;
 import org.apache.fineract.infrastructure.core.exception.PlatformApiDataValidationException;
 import org.apache.fineract.infrastructure.core.service.DateUtils;
+import org.apache.fineract.infrastructure.event.business.domain.loan.LoanBalanceChangedBusinessEvent;
 import org.apache.fineract.infrastructure.event.business.domain.loan.LoanRescheduledDueAdjustScheduleBusinessEvent;
 import org.apache.fineract.infrastructure.event.business.service.BusinessEventNotifierService;
 import org.apache.fineract.infrastructure.security.service.PlatformSecurityContext;
@@ -52,6 +53,7 @@ import org.apache.fineract.portfolio.loanaccount.data.AccountingBridgeDataDTO;
 import org.apache.fineract.portfolio.loanaccount.data.LoanTermVariationsData;
 import org.apache.fineract.portfolio.loanaccount.data.ScheduleGeneratorDTO;
 import org.apache.fineract.portfolio.loanaccount.domain.Loan;
+import org.apache.fineract.portfolio.loanaccount.domain.LoanLifecycleStateMachine;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanRepaymentScheduleInstallment;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanRepaymentScheduleInstallmentRepository;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanRepaymentScheduleTransactionProcessorFactory;
@@ -122,6 +124,7 @@ public class LoanRescheduleRequestWritePlatformServiceImpl implements LoanResche
     private final LoanAccountingBridgeMapper loanAccountingBridgeMapper;
     private final LoanScheduleComponent loanSchedule;
     private final LoanTransactionRepository loanTransactionRepository;
+    private final LoanLifecycleStateMachine loanLifecycleStateMachine;
 
     /**
      * create a new instance of the LoanRescheduleRequest object from the JsonCommand object and persist
@@ -138,11 +141,6 @@ public class LoanRescheduleRequestWritePlatformServiceImpl implements LoanResche
 
             // use the loan id to get a Loan entity object
             final Loan loan = this.loanAssembler.assembleFrom(loanId);
-
-            if (loan.isChargedOff()) {
-                throw new GeneralPlatformDomainRuleException("error.msg.loan.is.charged.off",
-                        "Loan: " + loanId + " reschedule installment is not allowed. Loan Account is Charged-off", loanId);
-            }
 
             // validate the request in the JsonCommand object passed as
             // parameter
@@ -402,9 +400,15 @@ public class LoanRescheduleRequestWritePlatformServiceImpl implements LoanResche
             if (rescheduleFromDate == null) {
                 rescheduleFromDate = loanRescheduleRequest.getRescheduleFromDate();
             }
+
+            boolean hasInterestRateChange = false;
             for (LoanRescheduleRequestToTermVariationMapping mapping : loanRescheduleRequest
                     .getLoanRescheduleRequestToTermVariationMappings()) {
                 mapping.getLoanTermVariations().updateIsActive(true);
+                LoanTermVariationType termType = mapping.getLoanTermVariations().getTermType();
+                if (termType.isInterestRateVariation() || termType.isInterestRateFromInstallment()) {
+                    hasInterestRateChange = true;
+                }
             }
             BigDecimal annualNominalInterestRate = null;
             List<LoanTermVariationsData> loanTermVariations = new ArrayList<>();
@@ -450,6 +454,10 @@ public class LoanRescheduleRequestWritePlatformServiceImpl implements LoanResche
             // update the status of the request
             loanRescheduleRequest.approve(appUser, approvedOnDate);
 
+            Optional<LocalDate> lastTransactionDateForReprocessing = loanTransactionRepository.findLastTransactionDateForReprocessing(loan);
+            if (lastTransactionDateForReprocessing.isPresent()) {
+                loanLifecycleStateMachine.determineAndTransition(loan, lastTransactionDateForReprocessing.get());
+            }
             loan = saveAndFlushLoanWithDataIntegrityViolationChecks(loan);
 
             loanAccrualsProcessingService.processAccrualsOnInterestRecalculation(loan, true, false);
@@ -457,6 +465,9 @@ public class LoanRescheduleRequestWritePlatformServiceImpl implements LoanResche
 
             postJournalEntries(loan, existingTransactionIds, existingReversedTransactionIds);
             loanAccrualTransactionBusinessEventService.raiseBusinessEventForAccrualTransactions(loan, existingTransactionIds);
+            if (hasInterestRateChange) {
+                businessEventNotifierService.notifyPostBusinessEvent(new LoanBalanceChangedBusinessEvent(loan));
+            }
 
             return new CommandProcessingResultBuilder().withCommandId(jsonCommand.commandId()).withEntityId(loanRescheduleRequestId)
                     .withLoanId(loanRescheduleRequest.getLoan().getId()).with(changes).withClientId(loan.getClientId())

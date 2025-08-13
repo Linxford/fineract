@@ -1403,7 +1403,6 @@ public class Loan extends AbstractAuditableWithUTCDateTimeCustom<Long> {
      * @return a schedule installment is related to the provided date
      **/
     public LoanRepaymentScheduleInstallment getRelatedRepaymentScheduleInstallment(LocalDate date) {
-        // TODO first installment should be fromInclusive
         return getRepaymentScheduleInstallment(e -> DateUtils.isDateInRangeFromExclusiveToInclusive(date, e.getFromDate(), e.getDueDate()));
     }
 
@@ -1541,7 +1540,8 @@ public class Loan extends AbstractAuditableWithUTCDateTimeCustom<Long> {
             List<LoanRepaymentScheduleInstallment> installments = getRepaymentScheduleInstallments();
             int numberOfInstallments = 0;
             for (final LoanRepaymentScheduleInstallment installment : installments) {
-                if (!installment.isRecalculatedInterestComponent()) {
+                if (!installment.isRecalculatedInterestComponent() && !installment.isAdditional() && !installment.isDownPayment()
+                        && !installment.isReAged()) {
                     numberOfInstallments++;
                 }
             }
