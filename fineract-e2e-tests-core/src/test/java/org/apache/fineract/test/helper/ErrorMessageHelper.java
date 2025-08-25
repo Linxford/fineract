@@ -64,7 +64,7 @@ public final class ErrorMessageHelper {
     }
 
     public static String setIncorrectBusinessDateMandatoryFailure() {
-        return "The parameter 'date' is mandatory: '${validatedValue}'.";
+        return "The parameter 'date' is mandatory.";
     }
 
     public static String setCurrencyEmptyValueFailure() {
@@ -695,6 +695,10 @@ public final class ErrorMessageHelper {
                 actual, expected);
     }
 
+    public static String wrongDataInExternalAssetOwnerLoanProductAttribute(String attributeKey, long loanProduct) {
+        return String.format("No attribute %s for loan product %s is found!", attributeKey, loanProduct);
+    }
+
     public static String wrongData(String actual, String expected) {
         return String.format("Wrong data. Actual value is: %s - But expected value is: %s", actual, expected);
     }
@@ -1031,6 +1035,10 @@ public final class ErrorMessageHelper {
 
     public static String updateAvailableDisbursementLoanLessMinAllowedAmountFailure() {
         return "The parameter `amount` must be greater than or equal to 0.";
+    }
+
+    public static String updateAvailableDisbursementLoanCannotBeZeroAsNothingWasDisbursed() {
+        return "Failed data validation due to: cannot.be.zero.as.nothing.was.disbursed.yet.";
     }
 
     public static String wrongValueInLineInBuyDownFeeTab(String resourceId, int line, List<List<String>> actualList,
