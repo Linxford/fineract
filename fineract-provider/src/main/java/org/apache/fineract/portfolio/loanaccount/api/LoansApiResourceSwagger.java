@@ -524,6 +524,8 @@ final class LoansApiResourceSwagger {
             @Schema(example = "1000000.000000")
             public BigDecimal totalCapitalizedIncome;
             @Schema(example = "0.000000")
+            public BigDecimal totalCapitalizedIncomeAdjustment;
+            @Schema(example = "0.000000")
             public BigDecimal principalPaid;
             @Schema(example = "0.00")
             public BigDecimal principalAdjustments;
@@ -1018,6 +1020,8 @@ final class LoansApiResourceSwagger {
 
             @Schema(example = "100.000000")
             public BigDecimal availableDisbursementAmount;
+            @Schema(example = "150.000000")
+            public BigDecimal availableDisbursementAmountWithOverApplied;
             @Schema(example = "12")
             public Integer pastDueDays;
             @Schema(example = "[2022, 07, 01]")
