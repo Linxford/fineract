@@ -45,6 +45,7 @@ import org.apache.fineract.infrastructure.core.service.MathUtil;
 import org.apache.fineract.organisation.holiday.domain.Holiday;
 import org.apache.fineract.organisation.workingdays.domain.WorkingDays;
 import org.apache.fineract.portfolio.common.service.Validator;
+import org.apache.fineract.portfolio.loanaccount.api.LoanTransactionApiConstants;
 import org.apache.fineract.portfolio.loanaccount.data.ScheduleGeneratorDTO;
 import org.apache.fineract.portfolio.loanaccount.domain.Loan;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanBuyDownFeeBalance;
@@ -149,6 +150,11 @@ public class ProgressiveLoanTransactionValidatorImpl implements ProgressiveLoanT
                 }
             }
 
+            final Long transactionClassificationId = fromApiJsonHelper
+                    .extractLongNamed(LoanTransactionApiConstants.TRANSACTION_CLASSIFICATIONID_PARAMNAME, element);
+            loanTransactionValidator.validateClassificationCodeValue(LoanTransactionApiConstants.CAPITALIZED_INCOME_CLASSIFICATION_CODE,
+                    transactionClassificationId, baseDataValidator);
+
             validatePaymentDetails(baseDataValidator, element);
             validateNote(baseDataValidator, element);
             validateExternalId(baseDataValidator, element);
@@ -218,7 +224,7 @@ public class ProgressiveLoanTransactionValidatorImpl implements ProgressiveLoanT
                 }
                 if (transactionAmount != null) {
                     LoanCapitalizedIncomeBalance capitalizedIncomeBalance = loanCapitalizedIncomeBalanceRepository
-                            .findByLoanIdAndLoanTransactionId(loanId, capitalizedIncomeTransactionId);
+                            .findByLoanIdAndLoanTransactionIdAndDeletedFalseAndClosedFalse(loanId, capitalizedIncomeTransactionId);
                     if (MathUtil.isLessThan(capitalizedIncomeBalance.getAmount()
                             .subtract(MathUtil.nullToZero(capitalizedIncomeBalance.getAmountAdjustment())), transactionAmount)) {
                         baseDataValidator.reset().parameter("transactionAmount").value(transactionAmount).failWithCode(
@@ -276,7 +282,8 @@ public class ProgressiveLoanTransactionValidatorImpl implements ProgressiveLoanT
     }
 
     private static final List<String> BUY_DOWN_FEE_TRANSACTION_SUPPORTED_PARAMETERS = List
-            .of(new String[] { "transactionDate", "dateFormat", "locale", "transactionAmount", "paymentTypeId", "note", "externalId" });
+            .of(new String[] { "transactionDate", "dateFormat", "locale", "transactionAmount", "paymentTypeId", "note", "externalId",
+                    LoanTransactionApiConstants.TRANSACTION_CLASSIFICATIONID_PARAMNAME });
 
     @Override
     public void validateBuyDownFee(JsonCommand command, Long loanId) {
@@ -312,6 +319,11 @@ public class ProgressiveLoanTransactionValidatorImpl implements ProgressiveLoanT
 
         final BigDecimal transactionAmount = this.fromApiJsonHelper.extractBigDecimalWithLocaleNamed("transactionAmount", element);
         baseDataValidator.reset().parameter("transactionAmount").value(transactionAmount).notNull().positiveAmount();
+
+        final Long transactionClassificationId = fromApiJsonHelper
+                .extractLongNamed(LoanTransactionApiConstants.TRANSACTION_CLASSIFICATIONID_PARAMNAME, element);
+        loanTransactionValidator.validateClassificationCodeValue(LoanTransactionApiConstants.BUY_DOWN_FEE_CLASSIFICATION_CODE,
+                transactionClassificationId, baseDataValidator);
 
         throwExceptionIfValidationWarningsExist(dataValidationErrors);
     }
@@ -389,8 +401,8 @@ public class ProgressiveLoanTransactionValidatorImpl implements ProgressiveLoanT
 
                 }
                 if (transactionAmount != null) {
-                    LoanBuyDownFeeBalance buydownFeeBalance = loanBuydownFeeBalanceRepository.findByLoanIdAndLoanTransactionId(loanId,
-                            buyDownFeeTransactionId);
+                    LoanBuyDownFeeBalance buydownFeeBalance = loanBuydownFeeBalanceRepository
+                            .findByLoanIdAndLoanTransactionIdAndDeletedFalseAndClosedFalse(loanId, buyDownFeeTransactionId);
                     if (buydownFeeBalance == null) {
                         baseDataValidator.reset().parameter("buyDownFeeTransactionId").failWithCode("buydown.fee.balance.not.found",
                                 "Buy down fee balance not found for the specified transaction.");
@@ -576,9 +588,15 @@ public class ProgressiveLoanTransactionValidatorImpl implements ProgressiveLoanT
         loanTransactionValidator.validateManualInterestRefundTransaction(json);
     }
 
+    @Override
+    public void validateClassificationCodeValue(final String codeName, final Long transactionClassificationId,
+            DataValidatorBuilder baseDataValidator) {
+        loanTransactionValidator.validateClassificationCodeValue(codeName, transactionClassificationId, baseDataValidator);
+    }
+
     private Set<String> getCapitalizedIncomeParameters() {
-        return new HashSet<>(
-                Arrays.asList("transactionDate", "dateFormat", "locale", "transactionAmount", "paymentTypeId", "note", "externalId"));
+        return new HashSet<>(Arrays.asList("transactionDate", "dateFormat", "locale", "transactionAmount", "paymentTypeId", "note",
+                "externalId", LoanTransactionApiConstants.TRANSACTION_CLASSIFICATIONID_PARAMNAME));
     }
 
     private Set<String> getCapitalizedIncomeAdjustmentParameters() {

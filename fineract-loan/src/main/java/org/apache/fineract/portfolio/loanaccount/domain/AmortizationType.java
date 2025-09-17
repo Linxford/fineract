@@ -16,11 +16,19 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.fineract.infrastructure.security.service;
+package org.apache.fineract.portfolio.loanaccount.domain;
 
-import org.apache.fineract.infrastructure.core.domain.FineractPlatformTenant;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.apache.fineract.infrastructure.core.api.ApiFacingEnum;
 
-public interface BasicAuthTenantDetailsService {
+@Getter
+@RequiredArgsConstructor
+public enum AmortizationType implements ApiFacingEnum<AmortizationType> {
 
-    FineractPlatformTenant loadTenantById(String tenantId, boolean isReport);
+    AM("amortizationTransaction.type.amortization", "Amortization"), //
+    AM_ADJ("amortizationTransaction.type.amortizationAdjustment", "Amortization Adjustment"); //
+
+    private final String code;
+    private final String humanReadableName;
 }

@@ -145,7 +145,7 @@ You might see something like this if a Java 11 executable (class file format ver
 UnsupportedClassVersionError: com.example.package/ClassName has been compiled by a more recent version of the Java Runtime (class file version 65.0), this version of the Java Runtime only recognizes class file versions up to 55.0
 ```
 
-These builds are run in [short-lived virtual machines](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners), so locally reproducing the same may require additional effort, such as these extra clean-up procedures:
+The GitHub builds are run in [short-lived virtual machines](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners), so locally reproducing the same may require additional effort, such as these extra clean-up procedures:
 
 ```bash
 # Might fix `error: cannot find symbol` or other intermittent failures.
